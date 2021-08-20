@@ -351,6 +351,51 @@ instance_groups:
                 cpu: 5m
 `},
 				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "manifest-with-releases-and-labels",
+						Namespace: "default",
+					},
+					Data: map[string]string{bdc.ManifestSpecName: `---
+instance_groups:
+- instances: 1
+  jobs:
+  - name: foo
+    release: rel1
+  name: ig1
+  stemcell: default
+- instances: 1
+  jobs:
+  - name: foo
+    release: rel1
+  - name: bar
+    release: rel2
+  name: ig2
+  stemcell: default
+  env:
+    bosh:
+      agent:
+        settings:
+          labels:
+            foo: bar
+stemcells:
+- alias: default
+  os: osd
+  version: vosd
+releases:
+- name: rel1
+  version: vvv1
+  url: url
+  sha1: sha
+  stemcell:
+    os: os1
+    version: vos1
+- name: rel2
+  version: vvv2
+  url: url
+  sha1: sha
+`},
+				},
 			).Build()
 
 		remoteFileServer = ghttp.NewServer()
@@ -1156,6 +1201,42 @@ instance_groups:
 			}
 			_, err := withops.InterpolateExplicitVariables(incorrectBaseManifest, vars, true)
 			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Context("Add labels correctly", func() {
+
+		It("returns manifest with releases labels", func() {
+			expectedLabels0 := map[string]string{
+				"app.kubernetes.io/version-image-rel1": "os1-vos1-vvv1",
+			}
+			expectedLabels1 := map[string]string{
+				"foo": "bar",
+				"app.kubernetes.io/version-image-rel1": "os1-vos1-vvv1",
+				"app.kubernetes.io/version-image-rel2": "osd-vosd-vvv2",
+			}
+			deployment := &bdc.BOSHDeployment{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "foo-label-deployment",
+				},
+				Spec: bdc.BOSHDeploymentSpec{
+					Manifest: bdc.ResourceReference{
+						Type: bdc.ConfigMapReference,
+						Name: "manifest-with-releases-and-labels",
+					},
+				},
+			}
+
+			manifest, err := resolver.Manifest(ctx, deployment, "default")
+
+			Expect(err).ToNot(HaveOccurred())
+			Expect(manifest).ToNot(Equal(nil))
+			Expect(len(manifest.InstanceGroups)).To(Equal(2))
+
+			labels0 := manifest.InstanceGroups[0].Env.AgentEnvBoshConfig.Agent.Settings.Labels
+			labels1 := manifest.InstanceGroups[1].Env.AgentEnvBoshConfig.Agent.Settings.Labels
+			Expect(deep.Equal(labels0, expectedLabels0)).To(HaveLen(0))
+			Expect(deep.Equal(labels1, expectedLabels1)).To(HaveLen(0))
 		})
 	})
 })

@@ -373,6 +373,47 @@ func (m *Manifest) GetReleaseImage(instanceGroupName, jobName string) (string, e
 	return "", errors.Errorf("release '%s' not found", job.Release)
 }
 
+// AddReleasesLabels modifies the manifest by adding to each instance group
+// a label for each release used by its jobs
+func (m *Manifest) AddReleasesLabels() error {
+	var instanceGroup *InstanceGroup
+	for i := range m.InstanceGroups {
+		instanceGroup = m.InstanceGroups[i]
+
+		var stemcell *Stemcell
+		for j := range m.Stemcells {
+			if m.Stemcells[j].Alias == instanceGroup.Stemcell {
+				stemcell = m.Stemcells[j]
+			}
+		}
+
+		for _, job := range instanceGroup.Jobs {
+			for _, release := range m.Releases {
+				if release.Name == job.Release {
+					var stemcellVersion string
+					if release.Stemcell != nil {
+						stemcellVersion = release.Stemcell.OS + "-" + release.Stemcell.Version
+					} else {
+						if stemcell == nil {
+							return errors.Errorf("stemcell could not be resolved for instance group %s", instanceGroup.Name)
+						}
+						stemcellVersion = stemcell.OS + "-" + stemcell.Version
+					}
+
+					labelName := fmt.Sprintf("app.kubernetes.io/version-image-%s", job.Release)
+					labelValue := fmt.Sprintf("%s-%s", stemcellVersion, release.Version)
+					if instanceGroup.Env.AgentEnvBoshConfig.Agent.Settings.Labels == nil {
+						instanceGroup.Env.AgentEnvBoshConfig.Agent.Settings.Labels = make(map[string]string)
+					}
+					instanceGroup.Env.AgentEnvBoshConfig.Agent.Settings.Labels[labelName] = labelValue
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // GetJobOS returns the stemcell layer OS used for a Job
 // This is used for matching addon placement rules
 func (m *Manifest) GetJobOS(instanceGroupName, jobName string) (string, error) {

@@ -1497,5 +1497,32 @@ instance_groups:
 				Expect(vars).To(HaveLen(1))
 			})
 		})
+		Describe("AddReleasesLabels", func() {
+			It("Add labels to default manifest", func() {
+				manifest, err := LoadYAML([]byte(boshmanifest.Default))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(manifest).ToNot(BeNil())
+				err = manifest.AddReleasesLabels()
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(manifest.InstanceGroups).To(HaveLen(2))
+				ig := manifest.InstanceGroups[0]
+				Expect(ig.Name).To(Equal("redis-slave"))
+
+				labels := map[string]string{
+					"custom-label":                          "foo",
+					"app.kubernetes.io/version-image-redis": "opensuse-42.3-28.g837c5b3-30.263-7.0.0_234.gcd7d1132-36.15.0",
+				}
+				Expect(ig.Env.AgentEnvBoshConfig.Agent.Settings.Labels).To(Equal(labels))
+				ig = manifest.InstanceGroups[1]
+				Expect(ig.Name).To(Equal("diego-cell"))
+
+				labels = map[string]string{
+					"app.kubernetes.io/version-image-cflinuxfs3": "opensuse-15.0-28.g837c5b3-30.263-7.0.0_233.gde0accd0-0.62.0",
+				}
+				Expect(ig.Env.AgentEnvBoshConfig.Agent.Settings.Labels).To(Equal(labels))
+			})
+		})
+
 	})
 })

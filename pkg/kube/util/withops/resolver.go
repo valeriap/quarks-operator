@@ -95,6 +95,12 @@ func (r *Resolver) Manifest(ctx context.Context, bdpl *bdv1.BOSHDeployment, name
 	if err != nil {
 		return nil, err
 	}
+	// add to each instance group a labels for each used release to force the bpm controller
+	// updating sts and pods if a release changes
+	err = manifest.AddReleasesLabels()
+	if err != nil {
+		return nil, err
+	}
 	return r.applyVariables(ctx, bdpl, namespace, manifest, "manifest-addons")
 }
 
@@ -165,6 +171,12 @@ func (r *Resolver) ManifestDetailed(ctx context.Context, bdpl *bdv1.BOSHDeployme
 	manifest, err := bdm.LoadYAML(bytes)
 	if err != nil {
 		return nil, errors.Wrapf(err, "Loading yaml failed in interpolation task after applying ops %#v", m)
+	}
+
+	// add to each instance group a labels for each used release
+	err = manifest.AddReleasesLabels()
+	if err != nil {
+		return nil, errors.Wrapf(err, "Add labels for releases failed after interpolation: %#v", m)
 	}
 
 	manifest, err = r.applyVariables(ctx, bdpl, namespace, manifest, "detailed-manifest-addons")
